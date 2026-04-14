@@ -1,34 +1,53 @@
-import pandas as pd
+import os
+import re
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-FAQS = {
-    "dispatch": "Dispatch time is minimum 20 days from order date.",
-    "delivery": "Dispatch begins after crafting. Delivery depends on location.",
-    "color": "Yes, custom colors are available for most products.",
-    "bulk": "Yes, bulk and gifting orders are accepted.",
-    "handmade": "All Altair Crochet products are handmade."
-}
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FAQ_PATH = os.path.join(BASE_DIR, "docs", "faq.txt")
+
+def load_chunks():
+    with open(FAQ_PATH, "r", encoding="utf-8") as f:
+        text = f.read()
+
+    chunks = [line.strip() for line in text.split("\n") if line.strip()]
+    return chunks
+
+faq_chunks = load_chunks()
+
+vectorizer = TfidfVectorizer(stop_words="english", ngram_range=(1,2))
+faq_vectors = vectorizer.fit_transform(faq_chunks)
+
+def retrieve_context(query, top_k=3):
+    q = vectorizer.transform([query])
+    scores = cosine_similarity(q, faq_vectors)[0]
+
+    ranked = scores.argsort()[::-1][:top_k]
+    results = []
+
+    for idx in ranked:
+        if scores[idx] > 0.08:
+            results.append(faq_chunks[idx])
+
+    return results
+
+def generate_answer(query, contexts):
+    if not contexts:
+        return "I can help with crochet orders, dispatch, pricing, gifting and custom requests."
+
+    # join top relevant lines naturally
+    answer = " ".join(contexts[:2])
+
+    return answer
 
 def get_reply(msg, df):
-    text = msg.lower()
+    query = msg.lower().strip()
 
-    if "dispatch" in text or "how long" in text:
-        return FAQS["dispatch"]
+    # product lookup only if direct match
+    for _, row in df.iterrows():
+        if str(row["name"]).lower() in query:
+            return f"{row['name']} is available for ₹{row['price']}. {row['description']}"
 
-    if "color" in text or "custom colour" in text or "custom color" in text:
-        return FAQS["color"]
+    contexts = retrieve_context(query)
 
-    if "bulk" in text:
-        return FAQS["bulk"]
-
-    if "gift" in text and "1000" in text:
-        return "Recommended: Tulip Bouquet, Bow Keychain."
-
-    if "under" in text:
-        prices = [int(s) for s in text.split() if s.isdigit()]
-        if prices:
-            budget = prices[0]
-            items = df[df["price"] <= budget]["name"].head(3).tolist()
-            if items:
-                return "Recommended: " + ", ".join(items)
-
-    return "Please describe what you'd like. I can help with products, custom orders, colors, dispatch, and recommendations."
+    return generate_answer(query, contexts)
