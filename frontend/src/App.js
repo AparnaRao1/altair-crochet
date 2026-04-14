@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+// frontend/src/App.js
+
+import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import "./App.css";
 
@@ -12,6 +14,18 @@ function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [chatOpen, setChatOpen] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const [chat, setChat] = useState([
+    {
+      from: "bot",
+      text: "Welcome to Altair Crochet. Ask about dispatch, products, custom colours or recommendations."
+    }
+  ]);
+
+  const chatEndRef = useRef(null);
+
   useEffect(() => {
     axios.get("http://127.0.0.1:5000/products")
       .then(res => setProducts(res.data))
@@ -21,6 +35,12 @@ function App() {
   useEffect(() => {
     localStorage.setItem("altair_cart", JSON.stringify(cart));
   }, [cart]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({
+      behavior: "smooth"
+    });
+  }, [chat]);
 
   const categories = useMemo(() => {
     const unique = [...new Set(products.map(p => p.category))];
@@ -40,7 +60,9 @@ function App() {
       if (existing.qty >= 20) return;
 
       setCart(cart.map(c =>
-        c.id === item.id ? { ...c, qty: c.qty + 1 } : c
+        c.id === item.id
+          ? { ...c, qty: c.qty + 1 }
+          : c
       ));
     } else {
       setCart([...cart, { ...item, qty: 1 }]);
@@ -86,6 +108,39 @@ function App() {
       `https://wa.me/916364244719?text=Order Request%0A%0A${lines}%0A%0ATotal: ₹${total}`;
 
     window.open(url, "_blank");
+  };
+
+  const sendMessage = async () => {
+    if (!message.trim()) return;
+
+    const userText = message;
+
+    setChat(prev => [
+      ...prev,
+      { from: "user", text: userText }
+    ]);
+
+    setMessage("");
+
+    try {
+      const res = await axios.post(
+        "http://127.0.0.1:5000/chat",
+        { message: userText }
+      );
+
+      setChat(prev => [
+        ...prev,
+        { from: "bot", text: res.data.reply }
+      ]);
+    } catch {
+      setChat(prev => [
+        ...prev,
+        {
+          from: "bot",
+          text: "Connection issue. Please ensure backend server is running."
+        }
+      ]);
+    }
   };
 
   return (
@@ -137,6 +192,7 @@ function App() {
         </div>
 
         <aside className="cartPanel">
+
           <h2>Cart</h2>
 
           {cart.length === 0 && (
@@ -174,9 +230,71 @@ function App() {
               </button>
             )}
           </div>
+
+          <div className="assistantSection">
+            <button
+              className="chatToggle"
+              onClick={() => setChatOpen(true)}
+            >
+              Assistant
+            </button>
+          </div>
+
         </aside>
 
       </section>
+
+      {chatOpen && (
+        <div className="chatWindow">
+
+          <div className="chatTopBar">
+            <span>Altair Assistant</span>
+
+            <button
+              className="closeChat"
+              onClick={() => setChatOpen(false)}
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="chatBody">
+            {chat.map((msg, index) => (
+              <div
+                key={index}
+                className={
+                  msg.from === "user"
+                    ? "bubble userBubble"
+                    : "bubble botBubble"
+                }
+              >
+                {msg.text}
+              </div>
+            ))}
+
+            <div ref={chatEndRef}></div>
+          </div>
+
+          <div className="chatBottom">
+            <input
+              type="text"
+              placeholder="Type a message"
+              value={message}
+              onChange={(e) =>
+                setMessage(e.target.value)
+              }
+              onKeyDown={(e) =>
+                e.key === "Enter" && sendMessage()
+              }
+            />
+
+            <button onClick={sendMessage}>
+              Send
+            </button>
+          </div>
+
+        </div>
+      )}
 
     </div>
   );

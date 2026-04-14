@@ -2,6 +2,8 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 import pandas as pd
 import os
+from flask import request
+from chatbot import get_reply
 
 app = Flask(__name__)
 CORS(app)
@@ -28,6 +30,15 @@ def products():
         })
 
     return jsonify(items)
+@app.route("/chat", methods=["POST"])
+def chat():
+    data = request.json
+    msg = data["message"]
 
+    df = pd.read_csv("../dataset/dataset.csv")
+
+    reply = get_reply(msg, df)
+
+    return {"reply": reply}
 if __name__ == "__main__":
     app.run(debug=True)
