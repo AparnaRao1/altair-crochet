@@ -1,15 +1,25 @@
+# backend/chatbot.py
+# GPT-LIKE PREMIUM CHATBOT
+# Smart intent understanding
+# Image generation
+# Price prediction
+# FAQ RAG
+# Natural ecommerce assistant
+
 import os
 import re
 import random
-from collections import defaultdict
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+from image_generator import generate_image
+from price_predictor import predict_price
 
-# -----------------------------------
+
+# ---------------------------------------------------
 # FAQ LOAD
-# -----------------------------------
+# ---------------------------------------------------
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FAQ_PATH = os.path.join(BASE_DIR, "docs", "faq.txt")
@@ -17,8 +27,7 @@ FAQ_PATH = os.path.join(BASE_DIR, "docs", "faq.txt")
 
 def load_faq():
     with open(FAQ_PATH, "r", encoding="utf-8") as f:
-        lines = [x.strip() for x in f.readlines() if x.strip()]
-    return lines
+        return [line.strip() for line in f.readlines() if line.strip()]
 
 
 faq_chunks = load_faq()
@@ -31,162 +40,333 @@ vectorizer = TfidfVectorizer(
 faq_vectors = vectorizer.fit_transform(faq_chunks)
 
 
-def retrieve_faq(query):
+def faq_search(query):
     q = vectorizer.transform([query])
     scores = cosine_similarity(q, faq_vectors)[0]
 
     best = scores.argmax()
 
-    if scores[best] > 0.08:
+    if scores[best] > 0.10:
         return faq_chunks[best]
 
     return None
 
 
-# -----------------------------------
-# MEMORY
-# -----------------------------------
-
-memory = {
-    "flow": None,
-    "data": {}
-}
-
-
-# -----------------------------------
+# ---------------------------------------------------
 # HELPERS
-# -----------------------------------
+# ---------------------------------------------------
 
-def reset_memory():
-    memory["flow"] = None
-    memory["data"] = {}
-
-
-def contains_any(text, words):
-    return any(w in text for w in words)
+def get_cm(text):
+    nums = re.findall(r"\d+", text)
+    if nums:
+        return int(nums[0])
+    return 25
 
 
+def get_qty(text):
+    qty_match = re.search(r"qty\s*(\d+)", text)
+    if qty_match:
+        return int(qty_match.group(1))
+    return 1
 
+
+def size_from_cm(cm):
+    if cm <= 15:
+        return "S"
+    elif cm <= 25:
+        return "M"
+    else:
+        return "L"
+
+
+def has_any(text, words):
+    return any(word in text for word in words)
+
+
+# ---------------------------------------------------
+# MAIN CHATBOT
+# ---------------------------------------------------
 
 def get_reply(msg, df):
     text = msg.lower().strip()
 
+    # ---------------------------------------------------
+    # CUSTOM ORDER HELP
+    # ---------------------------------------------------
 
-    if contains_any(text, ["hi", "hello", "hey"]):
-        return random.choice([
-            "Hello. Welcome to Altair Crochet. How may I help you today?",
-            "Hi there. Looking for something custom or cute today?",
-            "Hello. I'd love to help you find the perfect crochet piece."
-        ])
+    if "custom order" in text:
+        return {
+            "reply": """Absolutely ✨ Please describe your custom order like this:
 
-   
+Product:
+Theme:
+Colour:
+Size:
+Quantity:
 
-    if memory["flow"] == "cardigan":
+Example:
+Tanjiro plushie green black 25 cm qty 2"""
+        }
 
-        if "size" not in memory["data"]:
-            memory["data"]["size"] = msg.upper()
-            return "Perfect. What colours would you like?"
+    # ---------------------------------------------------
+    # SMART PLUSHIE INTENT
+    # ---------------------------------------------------
 
-        elif "colour" not in memory["data"]:
-            memory["data"]["colour"] = msg
-            return "Lovely. Would you like regular fit or oversized?"
+    if has_any(text, [
+        "plushie",
+        "amigurumi",
+        "doll",
+        "preview plushie",
+        "anime plushie",
+        "toy"
+    ]):
 
-        elif "fit" not in memory["data"]:
-            memory["data"]["fit"] = msg
+        cm = get_cm(text)
+        qty = get_qty(text)
+        size = size_from_cm(cm)
 
-            size = memory["data"]["size"]
-            colour = memory["data"]["colour"]
-            fit = memory["data"]["fit"]
+        theme = "custom character"
 
-            reset_memory()
+        anime_names = [
+            "tanjiro",
+            "naruto",
+            "gojo",
+            "luffy",
+            "zoro",
+            "nezuko",
+            "itachi",
+            "goku"
+        ]
 
-            return f"Beautiful choice. Custom butterfly cardigan in {colour}, size {size}, {fit} fit. Estimated price starts from ₹2499. Dispatch time is minimum 20 days."
+        for name in anime_names:
+            if name in text:
+                theme = name.title()
 
-    if memory["flow"] == "plushie":
+        prompt = f"""
+        handmade crochet amigurumi plushie,
+        {theme},
+        anime inspired yarn doll,
+        premium product photography,
+        soft yarn texture,
+        white background
+        """
 
-        if "character" not in memory["data"]:
-            memory["data"]["character"] = msg
-            return "Cute choice. What colours would you like?"
+        filename = generate_image(prompt)
 
-        elif "colour" not in memory["data"]:
-            memory["data"]["colour"] = msg
-            return "What size would you prefer? (small / medium / large)"
+        price = predict_price(
+            "Custom Plushie",
+            size,
+            qty,
+            3
+        )
 
-        elif "size" not in memory["data"]:
-            memory["data"]["size"] = msg
+        return {
+            "reply": f"""Here is a preview of your custom {theme} plushie.
 
-            ch = memory["data"]["character"]
-            col = memory["data"]["colour"]
-            size = memory["data"]["size"]
+Approx Size: {cm} cm
+Quantity: {qty}
 
-            reset_memory()
+Estimated Price: ₹{price}
+Dispatch Time: Minimum 20 days from order confirmation.
 
-            return f"Lovely. Custom plushie of {ch} in {col}, size {size}. Estimated pricing starts from ₹1299. Dispatch time is minimum 20 days."
+Would you like to proceed?""",
+            "image": f"/generated/{filename}" if filename else None
+        }
 
-    if memory["flow"] == "top":
+    # ---------------------------------------------------
+    # CARDIGAN INTENT
+    # ---------------------------------------------------
 
-        if "size" not in memory["data"]:
-            memory["data"]["size"] = msg.upper()
-            return "Great. What colours would you like?"
+    if has_any(text, [
+        "cardigan",
+        "butterfly cardigan",
+        "crochet jacket",
+        "sweater"
+    ]):
 
-        elif "colour" not in memory["data"]:
-            memory["data"]["colour"] = msg
-            return "Would you like fitted style, loose fit or tie-back style?"
+        size = "M"
 
-        elif "fit" not in memory["data"]:
-            memory["data"]["fit"] = msg
+        if "xl" in text:
+            size = "XL"
+        elif "l" in text:
+            size = "L"
+        elif "s" in text:
+            size = "S"
 
-            s = memory["data"]["size"]
-            c = memory["data"]["colour"]
-            f = memory["data"]["fit"]
+        prompt = """
+        luxury butterfly crochet cardigan,
+        elegant fashion photography,
+        premium handmade yarn clothing,
+        clean white background
+        """
 
-            reset_memory()
+        filename = generate_image(prompt)
 
-            return f"Lovely. Custom crochet top in {c}, size {s}, {f}. Estimated pricing starts from ₹2499."
+        price = predict_price(
+            "Butterfly Cardigan",
+            size,
+            1,
+            4
+        )
 
-   
+        return {
+            "reply": f"""Here is a preview of your custom cardigan.
 
-    if contains_any(text, ["butterfly cardigan", "custom cardigan","custom top","top","clothes","dress"]):
-        reset_memory()
-        memory["flow"] = "cardigan"
-        return "Absolutely. What size would you like? (XS / S / M / L / XL)"
+Size: {size}
+Estimated Price: ₹{price}
 
-    if contains_any(text, ["custom plushie", "plushie"]):
-        reset_memory()
-        memory["flow"] = "plushie"
-        return "Absolutely. Which character / animal would you like?"
+Dispatch Time: Minimum 20 days from order confirmation.""",
+            "image": f"/generated/{filename}" if filename else None
+        }
 
-    if contains_any(text, ["custom boquet", "flowers", "rose","tulip","sunflower"]):
-        reset_memory()
-        memory["flow"] = "top"
-        return "Absolutely. What color would you like?"
+    # ---------------------------------------------------
+    # CROCHET TOP INTENT
+    # ---------------------------------------------------
 
-   
+    if has_any(text, [
+        "crochet top",
+        "top",
+        "butterfly top",
+        "halter top"
+    ]):
 
-    nums = re.findall(r"\d+", text)
+        size = "M"
 
-    if "under" in text and nums:
-        budget = int(nums[0])
+        if "xl" in text:
+            size = "XL"
+        elif "l" in text:
+            size = "L"
+        elif "s" in text:
+            size = "S"
 
-        matches = df[df["price"] <= budget]["name"].head(5).tolist()
+        prompt = """
+        stylish handmade crochet top,
+        aesthetic fashion product photo,
+        premium yarn clothing,
+        white background
+        """
 
-        if matches:
-            return "Lovely options in your budget: " + ", ".join(matches)
+        filename = generate_image(prompt)
 
+        price = predict_price(
+            "Crochet Top",
+            size,
+            1,
+            3
+        )
+
+        return {
+            "reply": f"""Here is a preview of your crochet top.
+
+Size: {size}
+Estimated Price: ₹{price}
+
+Dispatch Time: Minimum 20 days from order confirmation.""",
+            "image": f"/generated/{filename}" if filename else None
+        }
+
+    # ---------------------------------------------------
+    # BOUQUET / FLOWER INTENT
+    # ---------------------------------------------------
+
+    if has_any(text, [
+        "bouquet",
+        "flowers",
+        "tulip",
+        "rose",
+        "sunflower",
+        "gift bouquet"
+    ]):
+
+        prompt = """
+        handmade crochet flower bouquet,
+        tulips roses sunflowers,
+        elegant wrapping,
+        premium gift photography,
+        white background
+        """
+
+        filename = generate_image(prompt)
+
+        return {
+            "reply": """Here is a preview of a crochet bouquet.
+
+Estimated Price: ₹1299 onwards
+
+Dispatch Time: Minimum 20 days from order confirmation.""",
+            "image": f"/generated/{filename}" if filename else None
+        }
+
+    # ---------------------------------------------------
+    # BUDGET SEARCH
+    # ---------------------------------------------------
+
+    if "under" in text:
+
+        nums = re.findall(r"\d+", text)
+
+        if nums:
+            budget = int(nums[0])
+
+            matches = df[df["price"] <= budget]["name"].head(5).tolist()
+
+            if matches:
+                return {
+                    "reply": "Lovely options in your budget: " + ", ".join(matches)
+                }
+
+    # ---------------------------------------------------
+    # PRODUCT LOOKUP
+    # ---------------------------------------------------
 
     for _, row in df.iterrows():
-        name = str(row["name"]).lower()
 
-        if name in text:
-            return f"{row['name']} is available for ₹{row['price']}. Would you like to place an order or customise colours?"
+        if str(row["name"]).lower() in text:
+            return {
+                "reply": f"{row['name']} is available for ₹{row['price']}. Would you like to place an order?"
+            }
 
-    
+    # ---------------------------------------------------
+    # FAQ RAG
+    # ---------------------------------------------------
 
-    rag = retrieve_faq(text)
+    rag = faq_search(text)
 
     if rag:
-        return rag
+        return {
+            "reply": rag
+        }
 
-    
+    # ---------------------------------------------------
+    # GREETINGS
+    # ---------------------------------------------------
 
-    return "Contact @altair.crochet on instagram or +91 6364244719 on whatsapp."
+    if re.search(r"\b(hi|hello|hey|hii|heyy)\b", text):
+        return {
+            "reply": random.choice([
+                "Hello. Welcome to Altair Crochet. How may I help you today?",
+                "Hi there. Looking for something cute or custom today?",
+                "Hello. I’d love to help you create something beautiful."
+            ])
+        }
+
+    # ---------------------------------------------------
+    # FALLBACK
+    # ---------------------------------------------------
+
+    return {
+        "reply": """I can help with:
+
+• Custom plushies
+• Cardigans
+• Crochet tops
+• Bouquets
+• Pricing
+• Dispatch
+• Gifts
+
+Try:
+'I need Tanjiro plushie 25 cm'
+'I need cardigan XL'
+'Gift under 1000'"""
+    }

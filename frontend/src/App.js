@@ -23,6 +23,7 @@ function App() {
       text: "Welcome to Altair Crochet. Ask about dispatch, products, custom colours or recommendations."
     }
   ]);
+  
 
   const chatEndRef = useRef(null);
 

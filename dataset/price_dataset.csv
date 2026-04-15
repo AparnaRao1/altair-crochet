@@ -1,0 +1,28 @@
+product_name,size,quantity,complexity,price
+Butterfly Cardigan,S,1,2,3499
+Butterfly Cardigan,M,1,3,3999
+Butterfly Cardigan,L,1,4,4499
+Butterfly Cardigan,XL,1,5,4999
+Butterfly Cardigan,XL,2,5,9998
+
+Custom Plushie,S,1,2,999
+Custom Plushie,M,1,3,1299
+Custom Plushie,L,1,4,1699
+Custom Plushie,L,2,4,3398
+
+Tulip Bouquet,S,1,1,799
+Tulip Bouquet,M,1,2,999
+Tulip Bouquet,L,1,3,1299
+Tulip Bouquet,L,2,3,2598
+
+Crochet Top,S,1,2,1499
+Crochet Top,M,1,2,1499
+Crochet Top,L,1,3,1799
+Crochet Top,XL,1,4,1999
+Crochet Top,XL,2,4,3998
+
+Keychain,S,1,1,169
+Keychain,M,1,1,299
+Keychain,L,1,2,399
+Keychain,XL,1,3,599
+Keychain,XL,2,3,1198
